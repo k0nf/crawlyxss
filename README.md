@@ -1,4 +1,3 @@
-```markdown
 # Crawly - XSS Testing Tool
 
 Crawly is a command-line tool for crawling and testing websites for XSS vulnerabilities. It automates the process of scanning URLs, identifying parameters, and testing XSS payloads. It is designed to help bug bounty hunters and security professionals in their web application security testing efforts.
