@@ -20,13 +20,11 @@ pip install -r requirements.txt
 
 2. Run the `crawly.py` script with the following command-line arguments:
 ```
-python3 crawly.py --url [URL] --threads [NUM_THREADS] [--gen] [--num-payloads [NUM_PAYLOADS]]
+python3 crawly.py --url [URL] [--threads [NUM_THREADS]] [--gen [NUM_PAYLOADS]]
 ```
 
 - `--url` (required): URL of the website to test.
 - `--threads` (optional, default=10): Number of threads to use for testing.
-- `--gen` (optional): Generate XSS payloads instead of loading from `payloads.txt`.
-- `--num-payloads` (optional, default=1000): Number of XSS payloads to generate when using `--gen` flag.
 
 ## Examples
 
@@ -35,22 +33,32 @@ Test a website with default settings:
 python3 crawly.py --url https://example.com
 ```
 
-Test a website with generative mode and custom number of payloads:
-```
-python3 crawly.py --url https://example.com --gen --num-payloads 2000
-```
-
 ## Requirements
 
 - Python 3.7+
 - Requests library
 - Beautiful Soup library
+- Selenium library (for additional check script)
+
+## Additional Check Script
+
+The additional `check.py` script allows you to navigate to each URL in a text file and check if an alert or prompt is being displayed using Selenium. To use the script, follow these steps:
+
+1. Install the required packages listed in `requirements.txt` using pip:
+```
+pip install -r requirements.txt
+```
+
+2. Run the `check.py` script with the following command-line argument:
+```
+python3 check.py -l [URL_FILE]
+```
+
+- `-l` or `--list` (required): Path to the text file containing the list of URLs to check.
+
+The script will navigate to each URL in the file and check if an alert or prompt is being displayed using Selenium. If an alert or prompt is detected, the URL will be saved to a file with the format `{domain}_xss.txt`.
 
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 ```
-
-Please note that the content provided here is raw markdown text. Make sure to save it as `readme.md` in your project directory.
-
-Let me know if you have any further questions or need any more assistance!
