@@ -30,11 +30,11 @@ def process_request(url, headers, param, payload):
         response = requests.post(url, headers=headers, data={param: payload})
         if response.ok and payload in response.text:
             soup = BeautifulSoup(response.text, 'html.parser')
-            input_value = soup.find('input', {'name': param}).get('value')
-            if input_value != payload:
+            input_value = soup.find('input', {'name': param})
+            if input_value and input_value.get('value') != payload:
                 return payload, url, param
         return None
-    except requests.exceptions.RequestException:
+    except Exception as e:
         return None
 
 def save_potential_xss(payload, url, param):
@@ -82,6 +82,7 @@ def crawl_and_test_characters(url, num_threads):
                 print(f"An error occurred while crawling and testing URL: {current_url}")
                 print(str(e))
                 save_failed_request(current_url)
+                continue
 
         num_params = len(valid_params)
         num_payloads = len(all_payloads)
