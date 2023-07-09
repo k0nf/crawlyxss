@@ -1,129 +1,111 @@
 import argparse
-import requests
-from urllib.parse import urlparse, parse_qs, urljoin
-from bs4 import BeautifulSoup
-from concurrent.futures import ThreadPoolExecutor
+import logging
+from urllib.parse import urlparse, urlencode
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import UnexpectedAlertPresentException, NoAlertPresentException
 
-def find_links_from_html(html, base_url):
-    soup = BeautifulSoup(html, 'html.parser')
-    links = []
-    for link in soup.find_all('a'):
-        href = link.get('href')
-        if href:
-            absolute_url = urljoin(base_url, href)
-            if absolute_url.startswith(base_url):
-                links.append(absolute_url)
-    return links
+def start_chromedriver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    return webdriver.Chrome(options=chrome_options)
 
-def find_input_fields(html):
-    soup = BeautifulSoup(html, 'html.parser')
-    input_fields = []
-    for form in soup.find_all('form'):
-        for input_field in form.find_all('input'):
-            input_name = input_field.get('name')
-            if input_name:
-                input_fields.append(input_name)
-    return input_fields
+def check_for_xss_list(urls):
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    driver = start_chromedriver()
 
-def process_request(url, headers, param, payload):
+    num_urls = len(urls)
+    num_requests = 0
+    num_xss_found = 0
+
+    for i, url in enumerate(urls, 1):
+        try:
+            driver.get(url)
+            alert_present = EC.alert_is_present()(driver)
+            if alert_present:
+                print(f"XSS vulnerability found in {url}")
+                with open(f"{urlparse(url).netloc}_xss.txt", "a") as f:
+                    f.write(f"{url}\n")
+                num_xss_found += 1
+        except Exception as e:
+            logging.error(f"An error occurred while processing URL: {url}", exc_info=True)
+        
+        print_statistics(i, num_urls, num_requests, num_xss_found)
+
+    driver.quit()
+
+def check_for_xss_brute(url, payloads):
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    driver = start_chromedriver()
+
     try:
-        response = requests.post(url, headers=headers, data={param: payload})
-        if response.ok and payload in response.text:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            input_value = soup.find('input', {'name': param})
-            if input_value and input_value.get('value') != payload:
-                return payload, url, param
-        return None
+        driver.get(url)
+        param_elements = driver.find_elements(By.XPATH, "//input[@type='text' or @type='search' or @type='hidden']")
+        num_params = len(param_elements)
+        num_requests = 0
+        num_xss_found = 0
+
+        for i, element in enumerate(param_elements, 1):
+            param_name = element.get_attribute("name")
+            if param_name:
+                for payload in payloads:
+                    try:
+                        url_with_payload = f"{url}?{urlencode({param_name: payload})}"
+                        driver.get(url_with_payload)
+                        try:
+                            alert_present = EC.alert_is_present()(driver)
+                            if alert_present:
+                                print(f"XSS vulnerability found in {url_with_payload}")
+                                with open(f"{urlparse(url).netloc}_xss.txt", "a") as f:
+                                    f.write(f"{url_with_payload}\n")
+                                num_xss_found += 1
+                        except NoAlertPresentException:
+                            pass
+                    except UnexpectedAlertPresentException as e:
+                        alert_text = driver.switch_to.alert.text
+                        logging.error(f"ERROR: An error occurred while processing payload: {payload}", exc_info=True)
+                        logging.error(f"Alert Text: {alert_text}")
+                    except Exception as e:
+                        logging.error(f"An error occurred while processing payload: {payload}", exc_info=True)
+
+                    num_requests += 1
+                    print_statistics(i, num_params, num_requests, num_xss_found)
+
+    except NoAlertPresentException:
+        pass
     except Exception as e:
-        return None
+        logging.error(f"An error occurred while processing URL: {url}", exc_info=True)
 
-def save_potential_xss(payload, url, param):
-    domain = urlparse(url).netloc
-    filename = f"{domain}_potential_xss.txt"
-    with open(filename, 'a') as f:
-        f.write(f"{url}?{param}={payload}\n")
+    driver.quit()
 
-def save_failed_request(url):
-    domain = urlparse(url).netloc
-    filename = f"{domain}_failed_requests.txt"
-    with open(filename, 'a') as f:
-        f.write(f"{url}\n")
+def print_statistics(current_index, total_items, total_requests, total_xss_found):
+    progress = current_index / total_items
+    loading_animation = "." * int(progress * 10)
 
-def crawl_and_test_characters(url, num_threads):
-    visited_urls = set()
-    queue = [url]
-    valid_params = set()
-
-    with ThreadPoolExecutor(max_workers=num_threads) as xss_executor:
-        while queue:
-            current_url = queue.pop(0)
-            visited_urls.add(current_url)
-
-            try:
-                response = requests.get(current_url, headers=headers)
-                page_content = response.text
-
-                parsed_url = urlparse(current_url)
-                query_params = parse_qs(parsed_url.query)
-
-                for param in query_params:
-                    valid_params.add(param)
-
-                input_fields = find_input_fields(page_content)
-                for field in input_fields:
-                    valid_params.add(field)
-
-                links = find_links_from_html(page_content, current_url)
-                for link in links:
-                    if link not in visited_urls:
-                        queue.append(link)
-
-            except requests.exceptions.RequestException as e:
-                print(f"An error occurred while crawling and testing URL: {current_url}")
-                print(str(e))
-                save_failed_request(current_url)
-                continue
-
-        num_params = len(valid_params)
-        num_payloads = len(all_payloads)
-
-        payloads_tested = 0
-        payloads_found = 0
-        potential_xss = []
-
-        print(f"{num_params} params found: {', '.join(valid_params)}")
-        print(f"{num_payloads} payloads will be used")
-
-        for payload in all_payloads:
-            for param in valid_params:
-                result = xss_executor.submit(process_request, target_url, headers, param, payload)
-                if result.result():
-                    payloads_found += 1
-                    save_potential_xss(*result.result())
-                else:
-                    potential_xss.append((payload, target_url, param))
-            payloads_tested += 1
-            progress = payloads_tested / num_payloads
-            loading_animation = "." * int(progress * 10)
-            print(f"\r{payloads_tested}/{num_payloads} payloads tested [{loading_animation}] ", end="")
-
-        print(f"\n{payloads_found} XSS payloads found")
-        print(f"{len(potential_xss)} potential XSS payloads")
+    print(f"\rParameters found: {total_items} | Requests sent: {total_requests} | XSS found: {total_xss_found} [{loading_animation}] ", end="")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Crawl and test a website for XSS vulnerabilities.")
-    parser.add_argument("--url", help="URL of the website to test", required=True)
-    parser.add_argument("--threads", type=int, default=10, help="Number of threads to use for testing (default: 10)")
+    logging.basicConfig(level=logging.ERROR)
+
+    parser = argparse.ArgumentParser(description="Check for XSS vulnerabilities using Selenium.")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--list", "-l", help="Path to the file containing a list of URLs")
+    group.add_argument("--brute", metavar="URL", help="URL to check with brute-force mode")
     args = parser.parse_args()
 
-    target_url = args.url
-    num_threads = args.threads
-
-    with open('payloads.txt', 'r') as f:
-        all_payloads = f.read().splitlines()
-
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
-    }
-
-    crawl_and_test_characters(target_url, num_threads)
+    if args.list:
+        url_file = args.list
+        with open(url_file, "r") as f:
+            urls = [line.strip() for line in f.readlines()]
+        check_for_xss_list(urls)
+    else:
+        url = args.brute
+        payloads = []
+        with open("payloads.txt", "r") as f:
+            payloads = [line.strip() for line in f.readlines()]
+        check_for_xss_brute(url, payloads)
