@@ -19,7 +19,7 @@ pip install -r requirements.txt
 
 2. Run the `crawly.py` script with the following command-line arguments:
 ```
-python3 crawly.py --url [URL] [--threads [NUM_THREADS]] [--gen [NUM_PAYLOADS]]
+python3 crawly.py --url [URL] [--threads [NUM_THREADS]]
 ```
 
 - `--url` (required): URL of the website to test.
