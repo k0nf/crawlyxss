@@ -1,4 +1,5 @@
 import argparse
+import os
 from urllib.parse import urlparse, urlencode
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -8,6 +9,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import UnexpectedAlertPresentException
 import logging
 
+clear = lambda: os.system('clear')
 def start_chromedriver():
     chrome_options = Options()
     chrome_options.add_argument("--headless")
@@ -68,6 +70,7 @@ def check_for_xss_brute(url, payloads):
                       pass
                     
                     num_requests += 1
+                    
                     print_statistics(i, num_params, num_payloads, num_requests, num_xss_found)
 
     except Exception as e:
@@ -78,7 +81,7 @@ def check_for_xss_brute(url, payloads):
 def print_statistics(current_index, total_items, total_payloads, total_requests, total_xss_found):
     progress = current_index / total_items
     loading_animation = "." * int(progress * 10)
-
+    clear()
     print(f"\rParameters found: {total_items} | Payloads loaded: {total_payloads} | Requests sent: {total_requests} | XSS found: {total_xss_found} [{loading_animation}] ", end="")
 
 if __name__ == "__main__":
