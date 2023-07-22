@@ -17,10 +17,6 @@ clear = lambda: os.system('clear')
 def start_chromedriver():
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    # Get the current directory and construct the path to the Chrome binary
-    current_directory = os.path.dirname(os.path.abspath(__file__))
-    chrome_binary_path = os.path.join(current_directory, "chrome_binary")
-    chrome_options.binary_location = chrome_binary_path
     return webdriver.Chrome(options=chrome_options)
 
 def crawl(url, depth):
