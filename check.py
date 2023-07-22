@@ -1,6 +1,6 @@
 import argparse
 import os
-from urllib.parse import urlparse, parse_qs, urlencode
+from urllib.parse import urlparse, parse_qs, urlencode, urljoin
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -8,12 +8,56 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import UnexpectedAlertPresentException
 import logging
+import requests
+from bs4 import BeautifulSoup
+import time
 
 clear = lambda: os.system('clear')
+
 def start_chromedriver():
     chrome_options = Options()
     chrome_options.add_argument("--headless")
+    # Get the current directory and construct the path to the Chrome binary
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    chrome_binary_path = os.path.join(current_directory, "chrome_binary")
+    chrome_options.binary_location = chrome_binary_path
     return webdriver.Chrome(options=chrome_options)
+
+def crawl(url, depth):
+    visited = set()
+    urls_to_visit = [(url, 0)]
+
+    while urls_to_visit:
+        current_url, current_depth = urls_to_visit.pop(0)
+
+        if current_depth > depth:
+            break
+
+        if current_url in visited:
+            continue
+
+        visited.add(current_url)
+
+        try:
+            response = requests.get(current_url)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, "html.parser")
+                print(f"Crawling: {current_url}")
+                print(f"Params found: {parse_url_params(current_url)}")
+
+                for link in soup.find_all("a"):
+                    href = link.get("href")
+                    if href and not href.startswith("#") and not href.startswith("javascript"):
+                        absolute_url = urljoin(current_url, href)
+                        urls_to_visit.append((absolute_url, current_depth + 1))
+
+        except Exception as e:
+            logging.error(f"An error occurred while crawling URL: {current_url}", exc_info=True)
+
+def parse_url_params(url):
+    parsed_url = urlparse(url)
+    query_params = parse_qs(parsed_url.query)
+    return list(query_params.keys())
 
 def check_for_xss_list(urls, payloads):
     driver = start_chromedriver()
@@ -27,7 +71,6 @@ def check_for_xss_list(urls, payloads):
             driver.get(url)
             alert_present = EC.alert_is_present()(driver)
             if alert_present:
-                # print(f"XSS vulnerability found in {url}")
                 with open(f"{urlparse(url).netloc}_xss.txt", "a") as f:
                     f.write(f"{url}\n")
                 num_xss_found += 1
@@ -114,25 +157,49 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--list", "-l", help="Path to the file containing a list of URLs")
     group.add_argument("--brute", metavar="URL", help="URL to check with brute-force mode")
+    parser.add_argument("--depth", type=int, default=1, help="Maximum depth for crawling (default: 1)")
+    parser.add_argument("--no-crawl", "--nc", action="store_true", help="Disable crawling")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.ERROR)
 
-    if args.list:
-        url_file = args.list
-        with open(url_file, "r") as f:
-            urls = [line.strip() for line in f.readlines()]
-        payloads = []
-        with open("payloads.txt", "r") as f:
-            payloads = [line.strip() for line in f.readlines()]
-        check_for_xss_list(urls, payloads)
+    if args.no_crawl:
+        if args.list:
+            url_file = args.list
+            with open(url_file, "r", encoding="utf-8") as f:
+                urls = [line.strip() for line in f.readlines()]
+            payloads = []
+            with open("payloads.txt", "r", encoding="utf-8") as f:
+                payloads = [line.strip() for line in f.readlines()]
+            check_for_xss_list(urls, payloads)
+        else:
+            url = args.brute
+            payloads = []
+            with open("payloads.txt", "r", encoding="utf-8") as f:
+                payloads = [line.strip() for line in f.readlines()]
+            driver = start_chromedriver()
+            driver.get(url)
+            input_elements = driver.find_elements(By.XPATH, "//input[@type='text' or @type='search' or @type='hidden']")
+            driver.quit()
+            check_for_xss_brute(url, payloads, input_elements)
     else:
-        url = args.brute
-        payloads = []
-        with open("payloads.txt", "r") as f:
-            payloads = [line.strip() for line in f.readlines()]
-        driver = start_chromedriver()
-        driver.get(url)
-        input_elements = driver.find_elements(By.XPATH, "//input[@type='text' or @type='search' or @type='hidden']")
-        driver.quit()
-        check_for_xss_brute(url, payloads, input_elements)
+        if args.list:
+            url_file = args.list
+            with open(url_file, "r", encoding="utf-8") as f:
+                urls = [line.strip() for line in f.readlines()]
+            payloads = []
+            with open("payloads.txt", "r", encoding="utf-8") as f:
+                payloads = [line.strip() for line in f.readlines()]
+            for url in urls:
+                crawl(url, args.depth)
+                check_for_xss_list([url], payloads)
+        else:
+            url = args.brute
+            payloads = []
+            with open("payloads.txt", "r", encoding="utf-8") as f:
+                payloads = [line.strip() for line in f.readlines()]
+            driver = start_chromedriver()
+            driver.get(url)
+            input_elements = driver.find_elements(By.XPATH, "//input[@type='text' or @type='search' or @type='hidden']")
+            driver.quit()
+            check_for_xss_brute(url, payloads, input_elements)
