@@ -8,11 +8,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import UnexpectedAlertPresentException
 import logging
+import chromedriver_autoinstaller  # Added
 
 clear = lambda: os.system('clear')
 def start_chromedriver():
+    chromedriver_autoinstaller.install()  # Automatically install/update ChromeDriver
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    # chrome_options.add_argument("--headless")
     return webdriver.Chrome(options=chrome_options)
 
 def check_for_xss_list(urls, payloads):
@@ -98,12 +100,12 @@ if __name__ == "__main__":
         with open(url_file, "r") as f:
             urls = [line.strip() for line in f.readlines()]
         payloads = []
-        with open("payloads.txt", "r") as f:
+        with open("payloads.txt", "r", encoding="utf-8") as f:
             payloads = [line.strip() for line in f.readlines()]
         check_for_xss_list(urls, payloads)
     else:
         url = args.brute
         payloads = []
-        with open("payloads.txt", "r") as f:
+        with open("payloads.txt", "r", encoding="utf-8") as f:
             payloads = [line.strip() for line in f.readlines()]
         check_for_xss_brute(url, payloads)
