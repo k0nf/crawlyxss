@@ -9,7 +9,16 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import UnexpectedAlertPresentException
 import logging
 
-clear = lambda: os.system('clear')
+def clear():
+ 
+    # for windows
+    if os.name == 'nt':
+        _ = os.system('cls')
+ 
+    # for mac and linux(here, os.name is 'posix')
+    else:
+        _ = os.system('clear')
+    
 def start_chromedriver():
     chrome_options = Options()
     chrome_options.add_argument("--headless")
